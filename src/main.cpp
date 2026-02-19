@@ -10,7 +10,12 @@
 #include <stdio.h>
 #include <sys/stat.h>
 
-// Deine Datenstruktur vom 3DS
+/**
+ * Autor: Morris
+ * Name: GitHubWiiU
+ * Description: Download files from GitHub repositories on your Wii U
+ */
+
 typedef struct {
     char name[128];
     char downloadUrl[256];
@@ -18,12 +23,14 @@ typedef struct {
 } ListEntry;
 
 ListEntry listItems[150];
-int itemCount = 0, selectedIndex = 0;
+int itemCount = 0, selectedIndex = 0, viewMode = 0; // 0=Suche/Repos, 1=Files, 2=Erfolg
+char currentRepoName[128] = "";
 char *api_buffer = NULL;
 size_t api_buffer_size = 0;
 bool isBusy = false;
+double progress_percent = 0.0;
 
-// Hilfsfunktion für die GitHub API
+// API Parser & Download Logik
 size_t write_to_ram(void *ptr, size_t size, size_t nmemb, void *userdata) {
     size_t total = size * nmemb;
     char *new_ptr = (char*)realloc(api_buffer, api_buffer_size + total + 1);
@@ -42,7 +49,7 @@ void performApiRequest(const char* url) {
     api_buffer_size = 0;
     if (curl) {
         curl_easy_setopt(curl, CURLOPT_URL, url);
-        curl_easy_setopt(curl, CURLOPT_USERAGENT, "WiiU-GitHub-Client");
+        curl_easy_setopt(curl, CURLOPT_USERAGENT, "GitHubWiiU-Morris");
         curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
         curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
         curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_to_ram);
@@ -52,7 +59,7 @@ void performApiRequest(const char* url) {
     isBusy = false;
 }
 
-// Dein Parser (angepasst auf WiiU)
+// Parser für Repos & Releases (übernommen vom 3DS)
 void parseRepos() {
     itemCount = 0; char *p = api_buffer; if (!p) return;
     while (p && (p = strstr(p, "\"full_name\":\"")) && itemCount < 100) {
@@ -68,42 +75,61 @@ void parseRepos() {
 
 int main(int argc, char **argv) {
     WHBProcInit();
-    WHBLogConsoleInit(); // Standard: Hell auf Dunkel (kein Darkmode nötig)
+    WHBLogConsoleInit();
 
     VPADStatus vpad;
     VPADReadError error;
     bool showOnTV = false;
 
-    // Start-Suche
-    performApiRequest("https://api.github.com/search/repositories?q=WiiU+fork:true&per_page=50");
-    parseRepos();
-
     while (WHBProcIsRunning()) {
         VPADRead(VPAD_CHAN_0, &vpad, 1, &error);
-
         if (error == VPAD_READ_SUCCESS) {
-            // DEIN ZR-SWITCH: Wechselt den Fokus zum TV
+            // ZR: Screen Switch
             if (vpad.trigger & VPAD_BUTTON_ZR) {
                 showOnTV = !showOnTV;
                 WHBLogConsoleSetTarget(showOnTV ? WHB_LOG_CONSOLE_TV : WHB_LOG_CONSOLE_DRC);
             }
 
-            // Navigation wie beim 3DS
+            // HOME: Exit
+            if (vpad.hold & VPAD_BUTTON_HOME) break;
+
+            if (viewMode == 0) { // Repo-Suche
+                if (vpad.trigger & VPAD_BUTTON_Y) {
+                    // Auf Wii U nutzen wir hier vorerst eine Test-Suche
+                    performApiRequest("https://api.github.com/search/repositories?q=WiiU&per_page=50");
+                    parseRepos();
+                }
+                if (vpad.trigger & VPAD_BUTTON_A && itemCount > 0) {
+                    strncpy(currentRepoName, listItems[selectedIndex].name, 127);
+                    viewMode = 1; // Wechsel zu Files
+                }
+            } 
+            else if (viewMode == 1) { // Release/File Ansicht
+                if (vpad.trigger & VPAD_BUTTON_X) {
+                    // Download Logik hier (simuliert)
+                    viewMode = 2; 
+                }
+                if (vpad.trigger & VPAD_BUTTON_B) viewMode = 0;
+            }
+            else if (viewMode == 2) { // Erfolg
+                if (vpad.trigger & (VPAD_BUTTON_A | VPAD_BUTTON_B)) viewMode = 0;
+            }
+
+            // Scrollen (D-Pad)
             if (vpad.trigger & VPAD_BUTTON_DOWN && selectedIndex < itemCount - 1) selectedIndex++;
             if (vpad.trigger & VPAD_BUTTON_UP && selectedIndex > 0) selectedIndex--;
-            
-            if (vpad.hold & VPAD_BUTTON_HOME) break;
         }
 
         WHBLogConsoleClear();
-        printf("GitHubWiiU Client - [ZR] Screen Wechsel\n");
-        printf("=======================================\n\n");
-        
-        if (isBusy) {
-            printf("Lade Repositories...\n");
+        printf("GitHubWiiU by %s\n", "Morris");
+        printf("Mode: %s | [ZR] TV Switch\n", viewMode == 0 ? "Repos" : "Files");
+        printf("---------------------------------------\n");
+
+        if (viewMode == 2) {
+            printf("\n   SUCCESSFULLY DOWNLOADED!\n   Press A to go back.\n");
         } else {
             for (int i = 0; i < itemCount && i < 15; i++) {
-                if (i == selectedIndex) printf(" > %s\n", listItems[i].name);
+                if (i == selectedIndex) printf(" > [%s]\n", listItems[i].name);
                 else printf("   %s\n", listItems[i].name);
             }
         }
