@@ -1,0 +1,15 @@
+{
+    "name": "Wii U Homebrew Development",
+    "image": "devkitpro/toolchain-library:latest",
+    "features": {
+        "ghcr.io/devcontainers/features/common-utils:1": {}
+    },
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "ms-vscode.cpptools"
+            ]
+        }
+    },
+    "postCreateCommand": "sudo apt-get update && sudo apt-get install -y wut-pika"
+}
