@@ -1,0 +1,25 @@
+name: Wii U Build
+
+on: [push, pull_request]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container: devkitpro/toolchain-library:latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Install Wii U dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y wut-pika wut-curl wut-openssl
+
+      - name: Build with Make
+        run: make
+        
+      - name: Upload result
+        uses: actions/upload-artifact@v3
+        with:
+          name: GitHubWiiU-App
+          path: ./*.wuhb
